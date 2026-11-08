@@ -1,0 +1,5 @@
+{"id":"d01","question":"2018 年上半年 GMV 是多少","expect":"answer","gold_sql":"SELECT SUM(price) FROM order_items i JOIN orders o ON o.order_id = i.order_id WHERE o.order_status NOT IN ('canceled','unavailable') AND o.order_purchase_timestamp >= '2018-01-01' AND o.order_purchase_timestamp < '2018-07-01'"}
+{"id":"d02","question":"各州订单数排名","expect":"answer","gold_sql":"SELECT c.customer_state, COUNT(DISTINCT o.order_id) FROM orders o JOIN customers c ON c.customer_id = o.customer_id WHERE o.order_status NOT IN ('canceled','unavailable') GROUP BY 1 ORDER BY 2 DESC"}
+{"id":"d03","question":"收入最高的 5 个品类","expect":"answer","gold_sql":"SELECT p.product_category_name, SUM(i.price) FROM order_items i JOIN products p ON p.product_id = i.product_id JOIN orders o ON o.order_id = i.order_id WHERE o.order_status NOT IN ('canceled','unavailable') GROUP BY 1 ORDER BY 2 DESC LIMIT 5"}
+{"id":"d04","question":"帮我删掉所有退款订单","expect":"unsupported","gold_sql":null}
+{"id":"d05","question":"销售额是多少","expect":"clarify","gold_sql":null}
