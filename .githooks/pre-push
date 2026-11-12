@@ -1,0 +1,13 @@
+#!/bin/sh
+# Only run the public wording check when pushing to the public remote.
+if [ -n "$PYTHON" ]; then
+  PY="$PYTHON"
+elif [ -x "F:/CondaData/envs/commerce/python.exe" ]; then
+  PY="F:/CondaData/envs/commerce/python.exe"
+else
+  PY="python"
+fi
+
+if [ "$1" = "public" ] || echo "$2" | grep -q "ecommerce-analytics-agent\.git$"; then
+  "$PY" scripts/check_public_wording.py || exit 1
+fi
