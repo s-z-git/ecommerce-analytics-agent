@@ -50,7 +50,7 @@ python scripts/check_metrics.py
 
 ## 10 分钟演示（release 资产）
 
-如果只是临时演示，不必下载 60.8MB CSV、也不必跑 `build_db.py`；直接下载 Release 里的 `olist.duckdb.zip`：
+如果只是临时演示，不必下载 60.8MB CSV、也不必跑 `build_db.py`；直接下载 [olist.duckdb.zip](https://github.com/s-z-git/ecommerce-analytics-agent/releases/download/demo-assets-2026-11/olist.duckdb.zip)：
 
 ```powershell
 # 1) 解压到 data\warehouse\olist.duckdb
