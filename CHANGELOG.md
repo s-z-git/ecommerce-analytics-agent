@@ -1,5 +1,13 @@
 # CHANGELOG
 
+## 2026-11-13 — UI 改造：会话 + 业务 KPI + 状态卡
+
+- 会话：`data/ui_sessions.db` 的 `sessions` + `messages(meta_json)`；首问才落库，`?s=` 刷新恢复，多轮消息回放。
+- 结果：口径行 → 结论 → 3 个业务 KPI → 图 → 明细 / 口径 SQL；KPI 去掉「行数」，图最多 10 类并说明其余类已计入总量。
+- 澄清按钮化（GMV / 支付金额 / 卖家收入）；unsupported / no_data / error 统一状态卡。
+- 未配置 `DEEPSEEK_API_KEY` 时侧栏常驻提示。
+- 测试：`pytest tests/ -q` 125 passed。
+
 ## 2026-11-09
 
 - **架构审计修复**：`run_eval` 失败返回非 0；`trace_stats` 支持带时区输入并补单测；`payment_share` / `cancel_rate` 增加百分比图表；结果携带 `additivity` 元数据；计划解析失败也记录 token usage；新增 GitHub Actions CI。

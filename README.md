@@ -8,7 +8,7 @@
 
 ![架构图：自然语言 → QueryPlan → 语义层校验 → 契约渲染 → guard → DuckDB 只读 → 结果与 trace](docs/architecture.png)
 
-![UI 示例：问题 + 一句话结论 + KPI + 柱状图 + 口径徽章](docs/ui_result.png)
+![UI 示例：问题 + 一句话结论 + KPI + 图表 + 口径脚注](docs/ui-answer.png)
 
 **核心结果**：6 表 / 547,593 行；12 条指标契约；125 条单测覆盖四层（无数据库时 114 passed / 11 skipped）；30 题功能集 3 轮 90/90；12 条 acceptance set 12/12；30 题 P95 3.7s（全量 trace P95 4.0s）。
 
@@ -17,12 +17,16 @@
 **快速开始**：
 
 ```powershell
+$env:DEEPSEEK_API_KEY = "sk-..."
 python scripts/build_db.py
 python scripts/check_metrics.py
+streamlit run src/ui/app.py --server.port 8503
+
+# 可选：只跑 API
 uvicorn src.api.main:app --reload
 ```
 
-> 环境创建、绝对解释器路径、数据目录和常见报错见 [`docs/troubleshooting.md`](docs/troubleshooting.md)。
+> 需要 `DEEPSEEK_API_KEY`；未配置时侧栏会常驻提示，提问会失败。环境创建、绝对解释器路径、数据目录和常见报错见 [`docs/troubleshooting.md`](docs/troubleshooting.md)。
 
 ## 数据准备
 
@@ -44,6 +48,19 @@ python scripts/check_metrics.py
 
 数据库输出到 `data/warehouse/olist.duckdb`。数据文件不进镜像、不进版本库。
 
+## 10 分钟演示（release 资产）
+
+如果只是临时演示，不必下载 60.8MB CSV、也不必跑 `build_db.py`；直接下载 Release 里的 `olist.duckdb.zip`：
+
+```powershell
+# 1) 解压到 data\warehouse\olist.duckdb
+python -m pip install -r requirements.txt
+$env:DEEPSEEK_API_KEY = "sk-..."
+streamlit run src/ui/app.py --server.port 8503
+```
+
+默认 `DB_PATH=data/warehouse/olist.duckdb`；如果你放在别处，设置 `$env:DB_PATH` 指向它。数据文件不进 git，走 Release。Olist 数据为 CC BY-NC-SA 4.0，仅用于非商业演示，使用时保留来源说明。
+
 ## 演示
 
 3 分钟现场脚本见 [`docs/演示脚本.md`](docs/演示脚本.md)。推荐演示顺序：
@@ -52,6 +69,22 @@ python scripts/check_metrics.py
 2. `2018 年上半年各州订单数` → 分组 + 柱状图 + Top1 占比
 3. `销售额是多少` → 主动澄清口径
 4. `帮我删掉所有订单` → 只读拦截
+
+## 网页界面（2026-11-13 改造）
+
+![网页界面空态：会话列表 + 示例卡 + 输入框](docs/ui-empty.png)
+
+- **左侧会话**：按「今天 / 昨天 / MM-DD」分组，标题 = 时间 + 首问摘要；支持新建、切换、删除；`?s=<session_id>` 刷新恢复。当前新建会话显示「未保存」，首问才落库。
+- **结果层次**：数据截止 / 口径 / 只读 → 一句话结论 → ≤3 个业务 KPI → 图 → 完整结果 / 计算口径与 SQL。
+- **KPI 口径**：不再用「行数」充当指标。加和型 = 总量 / 最高 / Top1 占比；非加和型 = 平均 / 最高 / 最低；比率 = 最高 / 最低 / 平均；时间序列 = 最新 / 最高 / 区间变化。
+- **图表**：最多显示前 10 类；超过时 caption 明写「其余 N 类已计入总量」，避免和 KPI 总量对不上。
+- **澄清**：`销售额是多少` 会给出 3 个口径按钮（GMV / 支付金额 / 卖家收入），点击直接重跑。
+- **状态卡**：不支持、无数据、调用失败分别给处理建议；错误卡带 `error_code`、`trace_id` 和重试。
+- **会话边界**：`data/ui_sessions.db` 只做历史回放；每次查询语义仍是单轮，不做「那取消率呢」这类上下文消解。
+- **Key 提示**：未配置 `DEEPSEEK_API_KEY` 时侧栏常驻提示，不会等用户问完才撞红卡。
+
+更多截图：[分组结果](docs/ui-grouped.png) · [口径澄清](docs/ui-clarify.png) · [只读拦截](docs/ui-unsupported.png)。
+
 
 ## 工程化封装（非主卖点）
 
@@ -89,7 +122,7 @@ src/semantic/    metrics.yaml 指标契约 + registry 校验 + compiler 渲染
 src/exec/        guard 静态校验 + duck 只读执行
 src/agent/       pipeline 五步状态机
 src/api/         FastAPI（/health + POST /query）
-src/ui/          Streamlit
+src/ui/          Streamlit（app.py + sessions.py + session_list.py）
 eval/            评测脚本与题集（dev / functional / acceptance；acceptance 文件名为 holdout）
 scripts/         build_db.py + check_metrics.py + reference_values.py + trace_stats.py
 docs/            数据字典、指标契约、架构图、安全模型、稳定性报告
@@ -110,7 +143,7 @@ docs/            数据字典、指标契约、架构图、安全模型、稳定
 - **不支持预测 / 归因**：只做历史数据的确定性聚合，不做“下个月会怎样”或因果分析。
 - **30 条功能集是自建回归题**，不是 blind holdout；12 条 acceptance set 也是手写验收题，不宣称泛化。
 - **`gmv_mom` 是硬编码 SQL**：LAG + date spine 补月，通用拼装表达不了；改口径要改 SQL。
-- **无多轮追问**：当前只处理单轮问题，不支持“那取消率呢”这类上下文消解。
+- **UI 多轮回放，但语义单轮**：可以回看同一会话的历史；每次查询仍独立处理，不支持“那取消率呢”这类上下文消解。
 - **数据截止 2018-10-17**：所有“最近/本月”都锚定这个日期，不随运行当天变化。
 - Docker / MCP 是工程化封装，不是核心卖点。
 
@@ -127,3 +160,4 @@ docs/            数据字典、指标契约、架构图、安全模型、稳定
 ## 版本
 
 版本历史见 [`CHANGELOG.md`](CHANGELOG.md)。
+

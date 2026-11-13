@@ -376,7 +376,7 @@ def summarize(result: dict[str, Any]) -> str:
 
 
 def kpi_cards(result: dict[str, Any]) -> list[tuple[str, str, str]]:
-    """最多 3 个 KPI；非 ok 结果返回空列表，页面不会显示错误的数字。"""
+    """最多 3 个业务 KPI；不再用“行数”充当指标。"""
     if result.get("status") != "ok":
         return []
 
@@ -404,67 +404,77 @@ def kpi_cards(result: dict[str, Any]) -> list[tuple[str, str, str]]:
         if not valid:
             return []
         ordered = sorted(valid, key=lambda row: str(row[time_index]))
-        latest = ordered[-1]
+        first, latest = ordered[0], ordered[-1]
         top = max(ordered, key=lambda row: row[value_index])
         value_unit = _unit_for_column(columns[value_index], unit)
+        if _is_number(first[value_index]) and first[value_index] != 0:
+            delta = (latest[value_index] - first[value_index]) / first[value_index]
+            change = ("区间变化", _fmt_signed_ratio(delta),
+                      f"{first[time_index]} → {latest[time_index]}")
+        else:
+            avg = sum(row[value_index] for row in ordered) / len(ordered)
+            change = ("区间平均", _fmt_value(avg, value_unit), "")
         return [
             ("最新", _fmt_value(latest[value_index], value_unit), str(latest[time_index])),
             ("最高", _fmt_value(top[value_index], value_unit), str(top[time_index])),
-            ("时间点", f"{len(valid)} 个月", ""),
+            change,
         ]
 
     valid = [row for row in rows if _is_number(row[value_index])]
     if not valid:
         return []
     values = [row[value_index] for row in valid]
-    count = len(valid)
+
+    if len(valid) == 1:
+        row = valid[0]
+        category_index = next((i for i in range(len(columns)) if i != value_index), 0)
+        return [(
+            str(metric.get("label") or columns[value_index]),
+            _fmt_value(row[value_index], unit),
+            str(row[category_index]),
+        )]
 
     if unit == "ratio":
         top = max(valid, key=lambda row: row[value_index])
         low = min(valid, key=lambda row: row[value_index])
-        category_index = next(
-            (index for index in range(len(columns)) if index != value_index),
-            0,
-        )
+        category_index = next((i for i in range(len(columns)) if i != value_index), 0)
+        avg = sum(values) / len(values)
         return [
             ("最高", _fmt_value(top[value_index], unit), str(top[category_index])),
             ("最低", _fmt_value(low[value_index], unit), str(low[category_index])),
-            ("行数", f"{count} 行", ""),
+            ("平均", _fmt_value(avg, unit), ""),
         ]
 
     additivity = metric.get("additivity")
     is_non_additive = additivity == "non_additive" or (
         additivity is None and metric_id in _NON_ADDITIVE_IDS
     )
-    is_additive = additivity == "additive" or (
-        additivity is None and metric_id in _ADDITIVE_IDS
-    )
-    if is_non_additive:
-        total_label = "平均"
-        total_value = sum(values) / len(values)
-    else:
-        total_label = "总量"
-        total_value = sum(values)
-
     top = max(valid, key=lambda row: row[value_index])
-    category_index = next(
-        (index for index in range(len(columns)) if index != value_index),
-        0,
-    )
-    category_name = str(top[category_index])
+    low = min(valid, key=lambda row: row[value_index])
+    category_index = next((i for i in range(len(columns)) if i != value_index), 0)
+    top_name = str(top[category_index])
+    low_name = str(low[category_index])
 
+    if is_non_additive:
+        avg = sum(values) / len(values)
+        return [
+            ("平均", _fmt_value(avg, unit), ""),
+            ("最高", _fmt_value(top[value_index], unit), top_name),
+            ("最低", _fmt_value(low[value_index], unit), low_name),
+        ]
+
+    total = sum(values)
     share_index = _share_index(result, rows, columns, value_index)
     if share_index is not None:
-        third = ("Top1 占比", _fmt_value(top[share_index], "ratio"), category_name)
-    elif is_additive and total_value > 0:
-        third = ("Top1 占比", _fmt_value(top[value_index] / total_value, "ratio"), category_name)
+        share = ("Top1 占比", _fmt_value(top[share_index], "ratio"), top_name)
+    elif total > 0:
+        share = ("Top1 占比", _fmt_value(top[value_index] / total, "ratio"), top_name)
     else:
-        third = ("最高", _fmt_value(top[value_index], unit), category_name)
-
+        share = ("最高", _fmt_value(top[value_index], unit), top_name)
     return [
-        (total_label, _fmt_value(total_value, unit), ""),
-        ("行数", f"{count} 行", ""),
-        third,
+        ("总量", _fmt_value(total, unit), ""),
+        ("最高", _fmt_value(top[value_index], unit), top_name),
+        share,
     ]
 
 
@@ -550,7 +560,9 @@ def chart_spec(result: dict[str, Any]) -> dict[str, Any] | None:
     if len(valid) < 2:
         return None
     valid.sort(key=lambda row: row[value_index], reverse=True)
-    valid = valid[:15]
+    total_categories = len(valid)
+    valid = valid[:10]
+    hidden = total_categories - len(valid)
     return {
         "kind": "bar",
         "horizontal": is_ratio,
@@ -562,6 +574,7 @@ def chart_spec(result: dict[str, Any]) -> dict[str, Any] | None:
             columns[value_index]: [chart_value(row[value_index]) for row in valid],
         },
         "unit": unit,
+        "caption": ("仅显示前 10 类，其余 %d 类已计入总量。" % hidden) if hidden else "",
     }
 
 

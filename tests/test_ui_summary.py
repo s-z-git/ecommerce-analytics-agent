@@ -109,7 +109,7 @@ def test_kpi_cards_scalar() -> None:
 def test_kpi_cards_grouped_computes_top1_share() -> None:
     assert summary.kpi_cards(_grouped_result()) == [
         ("总量", "7,197 单", ""),
-        ("行数", "3 行", ""),
+        ("最高", "5,000 单", "SP"),
         ("Top1 占比", "69.5%", "SP"),
     ]
 
@@ -151,8 +151,8 @@ def test_kpi_cards_non_additive_without_share_shows_top_value() -> None:
     }
     assert summary.kpi_cards(result) == [
         ("平均", "R$ 90.00", ""),
-        ("行数", "2 行", ""),
         ("最高", "R$ 100.00", "SP"),
+        ("最低", "R$ 80.00", "RJ"),
     ]
 
 
@@ -175,7 +175,7 @@ def test_kpi_cards_ratio_grouped_uses_extremes() -> None:
     assert summary.kpi_cards(result) == [
         ("最高", "20.0%", "RJ"),
         ("最低", "10.0%", "SP"),
-        ("行数", "2 行", ""),
+        ("平均", "15.0%", ""),
     ]
 
 
@@ -211,7 +211,7 @@ def test_chart_spec_gmv_mom_draws_gmv_line_with_caption() -> None:
     assert "环比" in chart["caption"]
 
 
-def test_chart_spec_bar_keeps_top_15() -> None:
+def test_chart_spec_bar_keeps_top_10() -> None:
     rows = [[f"S{index:02d}", index] for index in range(20)]
     result = {
         "status": "ok",
@@ -225,9 +225,10 @@ def test_chart_spec_bar_keeps_top_15() -> None:
     assert chart["kind"] == "bar"
     assert chart["x"] == "客户所在州"
     assert chart["y"] == "订单数"
-    assert len(chart["data"]["客户所在州"]) == 15
+    assert len(chart["data"]["客户所在州"]) == 10
     assert chart["data"]["客户所在州"][0] == "S19"
     assert chart["data"]["订单数"][0] == 19
+    assert "其余 10 类" in chart["caption"]
 
 
 def test_chart_spec_ratio_category_uses_horizontal_bar() -> None:
@@ -291,3 +292,4 @@ def test_summary_handles_missing_keys() -> None:
         assert summary.kpi_cards(result) == []
         assert summary.chart_spec(result) is None
         assert summary.badge_line(result) == ""
+

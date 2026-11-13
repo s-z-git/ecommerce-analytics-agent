@@ -85,6 +85,8 @@ DEEPSEEK_API_KEY=你的 key
 $env:DEEPSEEK_API_KEY = "你的 key"
 ```
 
+UI 侧栏会在 key 缺失时常驻提示；页面不会白屏，但提问会失败。
+
 ### 查询超时 / 内存不足
 
 执行层限制在 `src/config.py`，可用环境变量覆盖：
@@ -94,6 +96,13 @@ $env:SQL_TIMEOUT_SECONDS = "10"
 $env:MAX_ROWS = "1000"
 $env:MEMORY_LIMIT = "2GB"
 ```
+
+## 3.1 UI 会话库（2026-11-13）
+
+- `data/ui_sessions.db` 存 `sessions` + `messages(meta_json)`；删除该文件可重置全部会话。
+- 侧栏的「未保存」是当前临时会话；首问后才落库，只打开页面不产生空会话。
+- 页面 URL 的 `?s=<session_id>` 可恢复；换一个 id 等于新会话。
+- UI 只做多轮回放；每次查询语义仍是单轮，不做上下文消解。
 
 ## 4. 公开仓库注意
 

@@ -24,7 +24,7 @@
 4. 全链路有 trace：plan → SQL → 行数 → 耗时 → 错误码
 
 ### 非目标（明确不做）
-多轮长对话、上传任意 CSV、多租户/登录、复杂窗口函数与 CTE 大杂烩、因果归因、预测/推荐、多 Agent、向量库查 schema、公网部署、微调、K8s/微服务/Kafka/ES。
+多轮语义消解（UI 只做历史回放）、上传任意 CSV、多租户/登录、复杂窗口函数与 CTE 大杂烩、因果归因、预测/推荐、多 Agent、向量库查 schema、公网部署、微调、K8s/微服务/Kafka/ES。
 
 ---
 
@@ -159,7 +159,7 @@ LLM 不写 SQL，所以不存在传统注入。真实威胁：
 - **不支持预测 / 归因**：只做历史数据的确定性聚合，不做“下个月会怎样”或因果分析。
 - **30 条功能集是自建回归题**，不是 blind holdout；12 条 acceptance set 也是手写验收题，不宣称泛化。
 - **`gmv_mom` 是硬编码 SQL**：LAG + date spine 补月，通用拼装表达不了；改口径要改 SQL。
-- **无多轮追问**：当前只处理单轮问题，不支持“那取消率呢”这类上下文消解。
+- **UI 多轮回放，语义单轮**：可以回看同一会话历史；每次查询仍独立处理，不支持“那取消率呢”这类上下文消解。
 - **数据截止 2018-10-17**：所有“最近/本月”都锚定这个日期，不随运行当天变化。
 
 ---
@@ -172,6 +172,17 @@ LLM 不写 SQL，所以不存在传统注入。真实威胁：
 - pipeline 结果携带 `additivity` 元数据，Top1 占比优先从 `metrics.yaml` 推导，不依赖新增硬编码集合。
 - 计划解析失败也把已消耗的 `usage` 写入 trace。
 - GitHub Actions：`pytest -q` 全量跑；有 DB 时再跑 `scripts/check_metrics.py`。
+
+## 6.3 UI 层（2026-11-13）
+
+- `src/ui/app.py` 负责页面与状态卡，`src/ui/sessions.py` 负责 `data/ui_sessions.db`，`src/ui/session_list.py` 负责侧栏。
+- 会话：`sessions` + `messages(meta_json)`；首问才落库，`?s=<session_id>` 刷新恢复；未落库的临时项显示「未保存」。
+- 结果：数据截止 / 口径 / 只读 → 一句话结论 → ≤3 个业务 KPI → 图 → 完整结果 / 计算口径与 SQL。
+- KPI 不使用「行数」：加和型 = 总量 / 最高 / Top1；非加和 = 平均 / 最高 / 最低；比率 = 最高 / 最低 / 平均；时间序列 = 最新 / 最高 / 区间变化。
+- 图表最多 10 类；超过时 caption 说明「其余 N 类已计入总量」。
+- `clarify` 用口径按钮直接重跑；`unsupported / no_data / error` 用状态卡；错误带 `error_code` / `trace_id` / 重试。
+- 未配置 `DEEPSEEK_API_KEY` 时侧栏常驻提示。
+- 边界：只改展示与会话存储，不改 QueryPlan、指标契约、guard 与 DuckDB 执行。
 
 ---
 

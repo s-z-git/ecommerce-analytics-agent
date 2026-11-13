@@ -4,6 +4,9 @@ data/raw/**/*.csv
 data/warehouse/*.duckdb
 data/warehouse/*.wal
 
+data/*.db
+data/*.duckdb
+
 # 运行产物
 eval/reports/
 eval/cases/*.json
@@ -21,7 +24,10 @@ __pycache__/
 .pytest_cache/
 .venv/
 
+.playwright-cli/
+
 # 编辑器
 .vscode/
 .idea/
 .DS_Store
+
