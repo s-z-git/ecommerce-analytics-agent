@@ -15,7 +15,7 @@ pip install -r requirements.txt
 本机绝对解释器：
 
 ```text
-F:\CondaData\envs\commerce\python.exe
+python
 ```
 
 PowerShell 里如果 `conda` 未初始化：
@@ -108,7 +108,7 @@ $env:MEMORY_LIMIT = "2GB"
 
 - `data/raw/*.csv`、`data/warehouse/*.duckdb`、`logs/` 不入库。
 - `.env` 不入库。
-- 公开仓库不需要本机的 `F:\CondaData\...` 路径；那只是本机排错示例。
+- 公开仓库不需要本机绝对路径；命令里的 `python` 指你的环境解释器。
 - 发布快照前检查 `git ls-files` 里没有内部文档和 `templates/`。
 
 ## 5. 没有数据库时跑测试
