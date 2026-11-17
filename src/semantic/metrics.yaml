@@ -1,0 +1,328 @@
+# 指标契约（metric contract）
+#
+# 这份文件是项目的核心资产，也是"语义层"的落点。
+# 注意：它不是"SQL 模板库"——每条指标声明了 grain、分母、时间字段、允许维度、
+# 口径说明，编译器据此生成 SQL。换一个指标只需改这里，不改代码。
+#
+# 待你（用户）确认/改写的地方标了「待确认」。
+version: 1
+
+# 数据截止日期：不要用 today()，数据只到 2018 年
+as_of_sql: "SELECT MAX(order_purchase_timestamp) FROM orders"
+
+# 公共 CTE：所有一对多子表先聚合到订单粒度，避免 join 放大
+ctes:
+  items_agg: |
+    SELECT order_id,
+           SUM(price)         AS gmv,
+           SUM(freight_value) AS freight,
+           COUNT(*)           AS item_count
+    FROM order_items
+    GROUP BY order_id
+  pay_agg: |
+    SELECT order_id, SUM(payment_value) AS paid
+    FROM order_payments
+    GROUP BY order_id
+  review_agg: |
+    SELECT order_id, AVG(review_score) AS avg_score
+    FROM order_reviews
+    GROUP BY order_id
+  pay_types: |
+    SELECT p.order_id, p.payment_type, SUM(p.payment_value) AS amount
+    FROM order_payments p
+    GROUP BY 1, 2
+  cust_orders: |
+    SELECT c.customer_unique_id,
+           COUNT(DISTINCT o.order_id) AS n_orders
+    FROM orders o
+    JOIN customers c ON c.customer_id = o.customer_id
+    WHERE o.order_status NOT IN ('canceled', 'unavailable')
+    GROUP BY c.customer_unique_id
+
+# 订单粒度可用的维度（品类/卖家不做维度，见 category_revenue）
+dimensions:
+  month:
+    label: 月份
+    expr: "strftime(o.order_purchase_timestamp, '%Y-%m')"
+  state:
+    label: 客户所在州
+    expr: "c.customer_state"
+    joins:
+      - "JOIN customers c ON c.customer_id = o.customer_id"
+    # 数据库里是巴西两字母州代码；给 LLM 明确映射，避免把"圣保罗州"直接当值。
+    examples:
+      SP: 圣保罗
+      RJ: 里约热内卢
+      MG: 米纳斯吉拉斯
+      RS: 南里奥格兰德
+      PR: 巴拉那
+      SC: 圣卡塔琳娜
+      BA: 巴伊亚
+      DF: 联邦区
+      GO: 戈亚斯
+      ES: 圣埃斯皮里图
+      PE: 伯南布哥
+      CE: 塞阿拉
+      PA: 帕拉
+      MT: 马托格罗索
+      MA: 马拉尼昂
+      MS: 南马托格罗索
+      PB: 帕拉伊巴
+      PI: 皮奥伊
+      RN: 北里奥格兰德
+      AL: 阿拉戈斯
+      SE: 塞尔希培
+      TO: 托坎廷斯
+      RO: 朗多尼亚
+      AM: 亚马孙
+      AC: 阿克里
+      AP: 阿马帕
+      RR: 罗赖马
+
+metrics:
+  # ---------- P0 ----------
+  gmv:
+    label: 商品交易总额
+    unit: BRL
+    grain: order
+    shape: grouped
+    from: "orders o JOIN items_agg i ON i.order_id = o.order_id"
+    ctes: [items_agg]
+    base_filter: "o.order_status NOT IN ('canceled', 'unavailable')"
+    time_field: "o.order_purchase_timestamp"
+    expr: "SUM(i.gmv)"
+    additivity: additive
+    allowed_dimensions: [month, state]
+    allowed_filters: [state]
+    note: "GMV = 有效订单的商品金额合计，不含运费；排除取消/不可用订单"
+
+  orders:
+    label: 订单数
+    unit: 单
+    grain: order
+    shape: grouped
+    from: "orders o"
+    ctes: []
+    base_filter: "o.order_status NOT IN ('canceled', 'unavailable')"
+    time_field: "o.order_purchase_timestamp"
+    expr: "COUNT(DISTINCT o.order_id)"
+    additivity: additive
+    allowed_dimensions: [month, state]
+    allowed_filters: [state]
+    note: "与 GMV 使用同一过滤集合，保证客单价可除"
+
+  aov:
+    label: 客单价
+    unit: BRL
+    grain: order
+    shape: grouped
+    from: "orders o JOIN items_agg i ON i.order_id = o.order_id"
+    ctes: [items_agg]
+    base_filter: "o.order_status NOT IN ('canceled', 'unavailable')"
+    time_field: "o.order_purchase_timestamp"
+    expr: "SUM(i.gmv) / NULLIF(COUNT(DISTINCT o.order_id), 0)"
+    additivity: non_additive
+    allowed_dimensions: [month, state]
+    allowed_filters: [state]
+    note: "客单价 = GMV / 订单数，分子分母同一集合；不等于'人均消费'"
+    clarifications:
+      - "人均消费 / ARPU 指的是按客户去重，不是按订单"
+
+  cancel_rate:
+    label: 取消率
+    unit: ratio
+    grain: order
+    shape: grouped
+    from: "orders o"
+    ctes: []
+    # 注意：分母是全部订单，与 GMV 的过滤集合不同
+    base_filter: "1 = 1"
+    time_field: "o.order_purchase_timestamp"
+    expr: "SUM(CASE WHEN o.order_status = 'canceled' THEN 1 ELSE 0 END) * 1.0 / NULLIF(COUNT(DISTINCT o.order_id), 0)"
+    additivity: non_additive
+    allowed_dimensions: [month, state]
+    allowed_filters: [state]
+    note: "取消率 = canceled 订单 / 全部订单（分母含所有状态，与 GMV 口径不同）"
+
+  delay_rate:
+    label: 延迟送达率
+    unit: ratio
+    grain: order
+    shape: grouped
+    from: "orders o"
+    ctes: []
+    # 分母只算已送达，未送达不能算"延迟"
+    base_filter: "o.order_status = 'delivered' AND o.order_delivered_customer_date IS NOT NULL"
+    time_field: "o.order_purchase_timestamp"
+    expr: "SUM(CASE WHEN o.order_delivered_customer_date > o.order_estimated_delivery_date THEN 1 ELSE 0 END) * 1.0 / NULLIF(COUNT(DISTINCT o.order_id), 0)"
+    additivity: non_additive
+    allowed_dimensions: [month, state]
+    allowed_filters: [state]
+    note: "延迟率 = 实际送达晚于预计送达 / 已送达订单（order_status='delivered' 且送达时间非空）；未送达不计入分母"
+
+  delivery_days:
+    label: 平均配送天数
+    unit: 天
+    grain: order
+    shape: grouped
+    from: "orders o"
+    ctes: []
+    base_filter: "o.order_status = 'delivered' AND o.order_delivered_customer_date IS NOT NULL"
+    time_field: "o.order_purchase_timestamp"
+    expr: "AVG(date_diff('day', o.order_purchase_timestamp, o.order_delivered_customer_date))"
+    additivity: non_additive
+    allowed_dimensions: [month, state]
+    allowed_filters: [state]
+    note: "下单到签收的自然日差；仅统计 order_status='delivered' 且送达时间非空的订单"
+
+  repeat_rate:
+    label: 复购率
+    unit: ratio
+    grain: customer
+    shape: grouped
+    from: "cust_orders co"
+    ctes: [cust_orders]
+    base_filter: "1 = 1"
+    time_field: "NULL"
+    expr: "SUM(CASE WHEN co.n_orders >= 2 THEN 1 ELSE 0 END) * 1.0 / NULLIF(COUNT(*), 0)"
+    additivity: non_additive
+    allowed_dimensions: []
+    allowed_filters: []
+    note: "复购率 = 有效订单≥2 次的 customer_unique_id / 至少有一笔有效订单的客户；不能用 customer_id（每单都会变）"
+    clarifications:
+      - "客户数 / 复购 必须说明是按 customer_unique_id 去重"
+
+  avg_rating:
+    label: 平均评分
+    unit: 分
+    grain: order
+    shape: grouped
+    from: "orders o JOIN review_agg r ON r.order_id = o.order_id"
+    ctes: [review_agg]
+    base_filter: "1 = 1"
+    time_field: "o.order_purchase_timestamp"
+    expr: "AVG(r.avg_score)"
+    additivity: non_additive
+    allowed_dimensions: [month, state]
+    allowed_filters: [state]
+    note: "先按订单取评价均值再求平均，避免一单多评拉偏"
+
+  # ---------- 自带分组的指标（不需要用户指定维度） ----------
+  category_revenue:
+    label: 品类收入 TopN
+    unit: BRL
+    grain: order_item
+    shape: topn
+    from: "order_items oi JOIN products p ON p.product_id = oi.product_id JOIN orders o ON o.order_id = oi.order_id"
+    ctes: []
+    base_filter: "o.order_status NOT IN ('canceled', 'unavailable')"
+    time_field: "o.order_purchase_timestamp"
+    expr: "SUM(oi.price)"
+    fixed_dimension:
+      label: 品类
+      expr: "COALESCE(p.product_category_name, '未分类')"
+    additivity: additive
+    allowed_dimensions: []
+    allowed_filters: [state]
+    default_limit: 10
+    note: "品类收入 = 商品金额合计（不含运费）；品类为空归入'未分类'；默认取 Top10"
+
+  seller_revenue:
+    label: 卖家收入 TopN
+    unit: BRL
+    grain: order_item
+    shape: topn
+    from: "order_items oi JOIN orders o ON o.order_id = oi.order_id"
+    ctes: []
+    base_filter: "o.order_status NOT IN ('canceled', 'unavailable')"
+    time_field: "o.order_purchase_timestamp"
+    expr: "SUM(oi.price)"
+    fixed_dimension:
+      label: 卖家
+      expr: "oi.seller_id"
+    additivity: additive
+    allowed_dimensions: []
+    allowed_filters: [state]
+    default_limit: 10
+    note: "卖家收入 = 该卖家商品金额合计；默认取 Top10"
+
+  # ---------- P1 ----------
+  payment_share:
+    label: 支付方式占比
+    unit: ratio
+    grain: order
+    shape: topn
+    from: "orders o JOIN pay_types pay ON pay.order_id = o.order_id"
+    ctes: [pay_types]
+    base_filter: "o.order_status NOT IN ('canceled', 'unavailable')"
+    time_field: "o.order_purchase_timestamp"
+    expr: "SUM(pay.amount) * 1.0 / NULLIF(SUM(SUM(pay.amount)) OVER (), 0)"
+    fixed_dimension:
+      label: 支付方式
+      expr: "pay.payment_type"
+    additivity: non_additive
+    allowed_dimensions: []
+    allowed_filters: [state]
+    note: "按支付金额占比（不是笔数）；一单多支付方式时按 order_id 汇总"
+
+  # ---------- 时间序列（环比） ----------
+  gmv_mom:
+    label: GMV 环比
+    unit: ratio
+    grain: month
+    shape: series
+    ctes: []
+    time_field: "o.order_purchase_timestamp"
+    allowed_filters: []
+    complete_month_start: "2017-01"
+    complete_month_end: "2018-08"
+    note: "只取完整自然月；用月份 date spine 补齐缺月，缺月或残月不计算环比（返回 NULL），默认返回最近 100 个月"
+    # 说明：这里直接 join order_items 是安全的——本查询只用到这一个一对多子表，
+    # 不存在多个子表互相放大的问题，所以不需要预聚合 CTE。
+    # complete_month_start/end 是业务上认可的分析窗口；2016-09/10/12 和 2018-09/10
+    # 样本过少，不作为环比基期。改数据范围时同步改这两个字段。
+    sql: |
+      WITH base AS (
+        SELECT strftime(o.order_purchase_timestamp, '%Y-%m') AS month,
+               SUM(oi.price) AS v
+        FROM orders o
+        JOIN order_items oi ON oi.order_id = o.order_id
+        WHERE o.order_status NOT IN ('canceled', 'unavailable')
+          AND {time_filter}
+          AND strftime(o.order_purchase_timestamp, '%Y-%m')
+              BETWEEN '{complete_month_start}' AND '{complete_month_end}'
+        GROUP BY 1
+      ),
+      bounds AS (
+        SELECT MIN(month) AS min_month, MAX(month) AS max_month FROM base
+      ),
+      months AS (
+        SELECT strftime(month_start, '%Y-%m') AS month
+        FROM range(
+          CAST(COALESCE((SELECT min_month || '-01' FROM bounds), '{complete_month_start}-01') AS DATE),
+          CAST(COALESCE((SELECT max_month || '-01' FROM bounds), '{complete_month_end}-01') AS DATE) + INTERVAL 1 MONTH,
+          INTERVAL 1 MONTH
+        ) AS t(month_start)
+      ),
+      series AS (
+        SELECT m.month, b.v
+        FROM months m
+        LEFT JOIN base b USING (month)
+      ),
+      lagged AS (
+        SELECT month, v,
+               LAG(v) OVER (ORDER BY month) AS prev_v
+        FROM series
+      )
+      SELECT * FROM (
+        SELECT month,
+               v AS gmv,
+               prev_v,
+               CASE WHEN v IS NULL OR prev_v IS NULL OR prev_v = 0 THEN NULL
+                    ELSE (v - prev_v) / prev_v END AS mom
+        FROM lagged
+        WHERE (SELECT COUNT(*) FROM base) > 0
+        ORDER BY month DESC
+        LIMIT ?
+      ) t
+      ORDER BY month

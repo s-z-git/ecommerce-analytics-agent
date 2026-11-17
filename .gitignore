@@ -1,0 +1,33 @@
+# 数据与仓库（体积大/可重建）
+data/raw/*.csv
+data/raw/**/*.csv
+data/warehouse/*.duckdb
+data/warehouse/*.wal
+
+data/*.db
+data/*.duckdb
+
+# 运行产物
+eval/reports/
+eval/cases/*.json
+!eval/cases/.gitkeep
+logs/
+*.log
+
+# 密钥
+.env
+.env.local
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+
+.playwright-cli/
+
+# 编辑器
+.vscode/
+.idea/
+.DS_Store
+

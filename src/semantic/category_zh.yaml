@@ -1,0 +1,88 @@
+# 品类码 → 中文名（B4a）
+#
+# 用途：语义层把结果翻回中文。`category_revenue` / `seller_revenue` 这类 topn 指标
+# 的分组列直接是库里的产品品类码（葡语），业务方看不懂 `beleza_saude` 这种值。
+#
+# 约束：
+#   1. 键集合必须与 `products.product_category_name` 的非空去重值**完全一致**（73 个）。
+#      `tests/test_category_zh.py` 会对着真实库断言，漏一个或多的一个都会红。
+#   2. 空值（610 行）不进本表，继续由 SQL 的 `COALESCE(..., '未分类')` 处理。
+#   3. 只做展示层翻译，**不改 SQL、不改指标契约**，所以 73 题回归零风险。
+#
+# 改数据源时：`scripts/build_db.py` 重建后若品类码集合变化，本表要同步改，
+# 否则测试会立刻失败（这是有意设计——静默显示英文码比测试报错更糟）。
+
+categories:
+  cama_mesa_banho: 床品餐桌布艺
+  esporte_lazer: 运动休闲
+  moveis_decoracao: 家具装饰
+  beleza_saude: 美妆健康
+  utilidades_domesticas: 家居日用
+  automotivo: 汽车用品
+  informatica_acessorios: 电脑配件
+  brinquedos: 玩具
+  relogios_presentes: 手表礼品
+  telefonia: 手机通讯
+  bebes: 母婴用品
+  perfumaria: 香水
+  papelaria: 文具
+  fashion_bolsas_e_acessorios: 时尚箱包配饰
+  cool_stuff: 潮玩周边
+  ferramentas_jardim: 工具园艺
+  pet_shop: 宠物用品
+  eletronicos: 消费电子
+  construcao_ferramentas_construcao: 建材工具
+  eletrodomesticos: 家用电器
+  malas_acessorios: 箱包配件
+  consoles_games: 游戏主机
+  moveis_escritorio: 办公家具
+  instrumentos_musicais: 乐器
+  eletroportateis: 小家电
+  casa_construcao: 家装建材
+  livros_interesse_geral: 大众图书
+  fashion_calcados: 时尚鞋类
+  moveis_sala: 客厅家具
+  climatizacao: 空调通风
+  livros_tecnicos: 专业技术书
+  telefonia_fixa: 固定电话
+  casa_conforto: 家居舒适
+  market_place: 平台杂货
+  alimentos_bebidas: 食品饮料
+  fashion_roupa_masculina: 男装
+  moveis_cozinha_area_de_servico_jantar_e_jardim: 厨卫餐区家具
+  sinalizacao_e_seguranca: 标识安防
+  construcao_ferramentas_seguranca: 劳保工具
+  eletrodomesticos_2: 家电（其他）
+  construcao_ferramentas_jardim: 园林工具
+  alimentos: 食品
+  bebidas: 饮料
+  construcao_ferramentas_iluminacao: 照明工具
+  agro_industria_e_comercio: 农林工商
+  industria_comercio_e_negocios: 工贸商务
+  artigos_de_natal: 圣诞用品
+  audio: 音频设备
+  artes: 艺术品
+  fashion_underwear_e_moda_praia: 内衣泳装
+  dvds_blu_ray: DVD 蓝光
+  moveis_quarto: 卧室家具
+  construcao_ferramentas_ferramentas: 五金工具
+  portateis_casa_forno_e_cafe: 便携炉具咖啡
+  livros_importados: 进口图书
+  pcs: 台式电脑
+  cine_foto: 影音摄像
+  fashion_roupa_feminina: 女装
+  musica: 音乐
+  artigos_de_festas: 节庆用品
+  artes_e_artesanato: 手工艺品
+  fashion_esporte: 运动时尚
+  flores: 鲜花
+  fraldas_higiene: 纸尿裤卫生用品
+  la_cuisine: 高端厨具
+  portateis_cozinha_e_preparadores_de_alimentos: 厨房小电器
+  moveis_colchao_e_estofado: 床垫沙发
+  tablets_impressao_imagem: 平板与打印
+  fashion_roupa_infanto_juvenil: 童装
+  casa_conforto_2: 家居舒适（其他）
+  pc_gamer: 游戏电脑
+  seguros_e_servicos: 保险服务
+  cds_dvds_musicais: 音乐 CD/DVD
