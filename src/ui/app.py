@@ -1,7 +1,7 @@
 """电商经营分析 Agent —— Streamlit 页面。
 
 结构：左侧会话 → 中间“口径 → 结论 → KPI → 图 → 明细” → 底部追问。
-只做展示；所有判断仍在 pipeline 里。每次查询语义独立，追问需补全条件。
+只做展示；所有判断仍在 pipeline 里。支持会话内追问：继承上一轮 QueryPlan；回顾类问句用规则回答。
 """
 from __future__ import annotations
 
@@ -19,7 +19,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from src.agent import pipeline  # noqa: E402
 from src.exec import duck  # noqa: E402
-from src.ui import summary  # noqa: E402
+from src.ui import conversation, summary  # noqa: E402
 from src.ui.session_list import render_session_list  # noqa: E402
 from src.ui.sessions import SessionStore  # noqa: E402
 
@@ -133,6 +133,8 @@ def render_footer(result: dict[str, Any]) -> None:
 
 
 def render_ok(result: dict[str, Any]) -> None:
+    if result.get("prev_plan_used"):
+        st.caption("本轮继承了上一轮的指标 / 维度 / 时间；只改了你说变的部分。")
     metric = result.get("metric") or {}
     bits = []
     if metric.get("label") or metric.get("id"):
@@ -239,6 +241,10 @@ def render_error(result: dict[str, Any]) -> None:
 
 
 def render_answer(result: dict[str, Any]) -> None:
+    if result.get("answer_type") == "session_recall":
+        render_state_card("info", "会话回顾",
+                          str(result.get("message") or result.get("answer") or ""))
+        return
     status = result.get("status")
     if status == "ok":
         render_ok(result)
@@ -285,9 +291,17 @@ def handle_question(memory: SessionStore, session_id: str, question: str) -> Non
     memory.add_turn(session_id, "user", question)
     st.session_state["scroll_to_latest"] = True
     render_question(question)
+
+    recall = conversation.recall_answer(memory, session_id, question)
+    if recall:
+        memory.add_turn(session_id, "assistant", recall["message"], meta=recall)
+        st.rerun()
+        return
+
+    prev_plan = memory.last_plan(session_id)
     with st.spinner("正在解析问题并查询…"):
         try:
-            result = pipeline.answer(question)
+            result = pipeline.answer(question, prev_plan=prev_plan)
         except Exception as exc:  # noqa: BLE001 - 页面必须给出可读错误
             result = {"status": "error", "question": question, "trace_id": "",
                       "error_code": "UI_EXCEPTION", "message": str(exc),
@@ -319,7 +333,7 @@ def main() -> None:
         with st.popover("⚙ 设置", width="stretch"):
             st.caption("数据范围：%s ~ %s" % (DATA_START, _as_of()))
             st.caption("执行：DuckDB 只读 · 指标契约 13 条")
-            st.caption("每次查询独立；追问请补全时间与指标。")
+            st.caption("支持追问：继承上一轮指标/维度/时间；上个月有歧义时会澄清。")
         st.caption("会话 ID：" + session_id)
 
     messages = memory.get_messages(session_id)

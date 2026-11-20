@@ -71,7 +71,27 @@ def _dimension_text() -> str:
     return "\n".join(lines)
 
 
-def build_messages(question: str, data_range: tuple[str | None, str | None]) -> list[dict]:
+def _prev_plan_text(prev_plan: QueryPlan | dict | None) -> str:
+    """把上一轮 QueryPlan 作为结构化上下文；只给 JSON，不给上一轮答案文本。"""
+    if prev_plan is None:
+        return ""
+    if isinstance(prev_plan, QueryPlan):
+        data = prev_plan.model_dump()
+    elif isinstance(prev_plan, dict):
+        data = prev_plan
+    else:
+        return ""
+    return (
+        "\n\n上一轮查询计划（JSON）：\n"
+        + json.dumps(data, ensure_ascii=False, indent=2)
+        + "\n\n本轮是追问：只修改用户明确改变的部分；"
+        + "未提及的 metrics / dimensions / filters / time_range 继承上一轮。"
+        + "\n如果用户说“上个月”但上一轮不是单月，输出 clarify，不要猜具体月份。"
+    )
+
+
+def build_messages(question: str, data_range: tuple[str | None, str | None],
+                   prev_plan: QueryPlan | dict | None = None) -> list[dict]:
     start, end = data_range
     user = f"""数据覆盖区间：{start} 至 {end}
 
@@ -80,6 +100,7 @@ def build_messages(question: str, data_range: tuple[str | None, str | None]) -> 
 
 可用维度：
 {_dimension_text()}
+{_prev_plan_text(prev_plan)}
 
 用户问题：{question}"""
     return [
@@ -134,14 +155,15 @@ def _to_plan(content: str) -> QueryPlan:
 
 
 def parse_plan(
-    question: str, data_range: tuple[str | None, str | None]
+    question: str, data_range: tuple[str | None, str | None],
+    prev_plan: QueryPlan | dict | None = None,
 ) -> tuple[QueryPlan, dict[str, int] | None]:
     """调 DeepSeek 拿 QueryPlan；输出不合法时按约束 5 只修 1 次，不无限重试。"""
     if not DEEPSEEK_API_KEY:
         raise AppError("NO_API_KEY", "环境变量 DEEPSEEK_API_KEY 未设置")
 
     client = OpenAI(api_key=DEEPSEEK_API_KEY, base_url=DEEPSEEK_BASE_URL)
-    messages = build_messages(question, data_range)
+    messages = build_messages(question, data_range, prev_plan)
     content, usage = _complete(client, messages)
 
     try:

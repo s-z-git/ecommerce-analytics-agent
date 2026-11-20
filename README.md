@@ -120,6 +120,14 @@ streamlit run src/ui/app.py --server.port 8503
 - **B5 之前双维结果会被画成锯齿折线**（100 个点挤在 6 个 x 上），这是真实 bug；B5 修复。
 - 不支持：多指标对比（GMV+订单数）、category/seller 作为通用维度。
 
+## 多轮追问（2026-11-21）
+
+- 把上一轮 `QueryPlan` 作为结构化上下文注入 prompt，不新增 schema 字段。
+- 支持：换维度（“那按州呢 / 按品类呢”）、换时间（“那 2017 年呢 / 2018 年 6 月呢”）、换过滤（“那只看 SP 州呢”）。
+- “上个月”只在上一轮是单月时支持；全年/多年时返回澄清，不让模型猜。
+- 回顾类问句（“我刚才问了什么”）用规则读 `ui_sessions.db`，不调 LLM。
+- 测试：`pytest` 152 passed；`check_metrics.py` 12/12；90/90 不变。
+
 ## 工程化封装（非主卖点）
 
 ### Docker
@@ -194,4 +202,8 @@ docs/            数据字典、指标契约、架构图、安全模型、稳定
 - 比率图表：`payment_share` / `cancel_rate` 用百分比横向条形图；`gmv_mom` 保留 GMV 折线，环比看 KPI。
 - 测试分层：API 层主要测 HTTP 状态码映射；业务正确性由 compiler / 执行 / 功能集覆盖。
 - CI：`.github/workflows/test.yml` 跑 pytest；有数据库时再跑 `check_metrics.py`。
+
+## 版本
+
+版本历史见 [`CHANGELOG.md`](CHANGELOG.md)。
 

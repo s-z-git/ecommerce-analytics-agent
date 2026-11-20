@@ -57,14 +57,19 @@ def _negative_metric_warning(rows: list[tuple], columns: list[str], metric_colum
     return None
 
 
-def answer(question: str, plan_override: QueryPlan | None = None) -> dict[str, Any]:
+def answer(question: str, plan_override: QueryPlan | None = None,
+           prev_plan: QueryPlan | dict | None = None) -> dict[str, Any]:
     """执行一次完整问答，返回统一结构的结果。失败也返回结构，不抛到上层。
 
     plan_override 只给离线回放/测试使用：传入后跳过 LLM，其余链路完全不变。
+    prev_plan 是上一轮的 QueryPlan；本轮只用于让 LLM 续写追问，不改 schema。
     """
     trace_id = uuid.uuid4().hex[:12]
     start = time.perf_counter()
-    result: dict[str, Any] = {"trace_id": trace_id, "question": question, "status": "error"}
+    result: dict[str, Any] = {
+        "trace_id": trace_id, "question": question, "status": "error",
+        "prev_plan_used": prev_plan is not None,
+    }
     error_detail: str | None = None
     llm_usage: dict[str, int] | None = None
     stage_ms: dict[str, int] = {}
@@ -74,7 +79,10 @@ def answer(question: str, plan_override: QueryPlan | None = None) -> dict[str, A
         if plan_override is None:
             llm_start = time.perf_counter()
             try:
-                plan, llm_usage = llm.parse_plan(question, data_range)
+                if prev_plan is None:
+                    plan, llm_usage = llm.parse_plan(question, data_range)
+                else:
+                    plan, llm_usage = llm.parse_plan(question, data_range, prev_plan)
             finally:
                 stage_ms["llm_ms"] = int((time.perf_counter() - llm_start) * 1000)
         else:
@@ -174,6 +182,7 @@ def answer(question: str, plan_override: QueryPlan | None = None) -> dict[str, A
             "metric_id": metric_meta.get("id"),
             "row_count": result.get("row_count"),
             "warning": result.get("warning"),
+            "prev_plan_used": bool(prev_plan),
             "error_detail": error_detail,
             "elapsed_ms": result["elapsed_ms"],
             "llm_ms": stage_ms.get("llm_ms"),

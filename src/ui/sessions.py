@@ -146,6 +146,19 @@ class SessionStore:
                 "UPDATE sessions SET updated_at = ? WHERE id = ?", (now, session_id)
             )
 
+    def last_plan(self, session_id: str) -> dict | None:
+        """最近一条 status=ok 且带 plan 的 assistant meta。"""
+        if not session_id:
+            return None
+        for msg in reversed(self.get_messages(session_id)):
+            if msg.get("role") != "assistant":
+                continue
+            meta = msg.get("meta") or {}
+            plan = meta.get("plan")
+            if meta.get("status") == "ok" and isinstance(plan, dict):
+                return plan
+        return None
+
     def get_messages(self, session_id: str) -> list[dict]:
         if not session_id:
             return []
