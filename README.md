@@ -195,7 +195,3 @@ docs/            数据字典、指标契约、架构图、安全模型、稳定
 - 测试分层：API 层主要测 HTTP 状态码映射；业务正确性由 compiler / 执行 / 功能集覆盖。
 - CI：`.github/workflows/test.yml` 跑 pytest；有数据库时再跑 `check_metrics.py`。
 
-## 版本
-
-版本历史见 [`CHANGELOG.md`](CHANGELOG.md)。
-

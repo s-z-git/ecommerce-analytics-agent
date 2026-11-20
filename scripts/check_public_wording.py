@@ -1,7 +1,7 @@
 """Check that the public repository contains no internal project wording.
 
 The pre-push hook calls this script only when pushing to the public remote.
-Scope: README/DESIGN/CHANGELOG, docs, eval code, source, tests and hooks.
+Scope: README/DESIGN, docs, eval code, source, tests and hooks.
 Tabular data under data/ and eval/questions*.jsonl is excluded.
 """
 from __future__ import annotations
@@ -31,7 +31,7 @@ KEYWORDS = (
 PATTERN = re.compile("|".join(KEYWORDS))
 
 SCOPE_PREFIXES = (".githooks/", "docs/", "eval/", "src/", "scripts/", "tests/", "templates/")
-SCOPE_FILES = ("README.md", "CHANGELOG.md", "DESIGN.md")
+SCOPE_FILES = ("README.md", "DESIGN.md")
 SELF = "scripts/check_public_wording.py"
 DATA_SUFFIXES = (".jsonl", ".json", ".csv", ".png", ".jpg", ".jpeg", ".parquet", ".duckdb")
 
