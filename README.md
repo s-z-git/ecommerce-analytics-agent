@@ -126,7 +126,7 @@ streamlit run src/ui/app.py --server.port 8503
 - 支持：换维度（“那按州呢 / 按品类呢”）、换时间（“那 2017 年呢 / 2018 年 6 月呢”）、换过滤（“那只看 SP 州呢”）。
 - “上个月”只在上一轮是单月时支持；全年/多年时返回澄清，不让模型猜。
 - 回顾类问句（“我刚才问了什么”）用规则读 `ui_sessions.db`，不调 LLM。
-- 测试：`pytest` 152 passed；`check_metrics.py` 12/12；90/90 不变。
+- 测试：有 DB 时 `pytest` 152 passed（144 原有 + 8 会话）；无 DB 时 140 passed / 12 skipped；`check_metrics.py` 12/12；90/90 不变。
 
 ## 工程化封装（非主卖点）
 
